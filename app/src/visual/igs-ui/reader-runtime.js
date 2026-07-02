@@ -289,9 +289,14 @@ function applyWebReaderRuntime(root, runtime) {
             ? runtime.win.visualViewport.height
             : Number(runtime.win && runtime.win.innerHeight) || 0;
         if (height > 0) root.style.height = `${Math.round(height)}px`;
+        syncOrientationClass(root, win);
     };
     syncHeight();
     if (win.visualViewport) addEventListenerWithCleanup(win.visualViewport, 'resize', syncHeight, runtime);
+    addEventListenerWithCleanup(win, 'orientationchange', syncHeight, runtime);
+    if (win.screen && win.screen.orientation) {
+        addEventListenerWithCleanup(win.screen.orientation, 'change', syncHeight, runtime);
+    }
 
     addRuntimeCleanup(runtime, () => {
         doc.body.style.overflow = savedBody.overflow;
@@ -306,6 +311,27 @@ function applyWebReaderRuntime(root, runtime) {
 function applyFullscreenReaderRuntime(root, current, runtime, ctx = {}) {
     const doc = runtime.doc;
     if (!doc) return;
+    const win = runtime.win || doc.defaultView || globalThis;
+
+    // requestFullscreen() 会重置浏览器的音频自动播放许可上下文，
+    // 导致 vertin-tips 等插件在进入全屏后调用 HTMLAudioElement.play() 被静默拒绝。
+    // 在用户手势调用链仍然有效时提前 resume 一个无声 AudioContext，以保留许可。
+    try {
+        const AudioCtorKey = win.AudioContext ? 'AudioContext' : (win.webkitAudioContext ? 'webkitAudioContext' : null);
+        if (AudioCtorKey) {
+            const ac = new win[AudioCtorKey]();
+            ac.resume().catch(() => {});
+            ac.close().catch(() => {});
+        }
+    } catch (e) { /* ignore — AudioContext not available */ }
+
+    syncOrientationClass(root, win);
+    const onOrientationChange = () => syncOrientationClass(root, win);
+    addEventListenerWithCleanup(win, 'orientationchange', onOrientationChange, runtime);
+    if (win.screen && win.screen.orientation) {
+        addEventListenerWithCleanup(win.screen.orientation, 'change', onOrientationChange, runtime);
+    }
+
     const target = doc.documentElement || doc.body;
     const request = target && (target.requestFullscreen || target.webkitRequestFullscreen);
     if (typeof request === 'function' && !doc.fullscreenElement && !doc.webkitFullscreenElement) {
@@ -368,4 +394,20 @@ function addEventListenerWithCleanup(target, type, handler, runtime) {
             target.removeEventListener(type, handler);
         }
     });
+}
+
+// 根据当前窗口宽高比在 root 上切换 igs-landscape / igs-portrait CSS 类，
+// 供全屏和网页模式下的布局 CSS 感知方向变化。
+function syncOrientationClass(root, win) {
+    if (!root || typeof root.classList === 'undefined') return;
+    const w = Number((win && win.innerWidth) || 0);
+    const h = Number((win && win.innerHeight) || 0);
+    const isLandscape = w > 0 && h > 0 && w > h;
+    if (isLandscape) {
+        root.classList.add('igs-landscape');
+        root.classList.remove('igs-portrait');
+    } else {
+        root.classList.add('igs-portrait');
+        root.classList.remove('igs-landscape');
+    }
 }

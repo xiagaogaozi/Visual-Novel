@@ -654,6 +654,10 @@ export function createIgsReaderHost(options = {}) {
 
     function rerenderActiveReader(optionsForRender = {}) {
         if (!state.activeReader) return { ok: true, reason: 'reader-not-open' };
+        // Veridis 等关键词过滤插件在生成结束后异步写回 DOM，用 readLiveVisibleText
+        // 拿当前最新渲染文本，确保翻页/重渲染时阅读器反映真实替换后的词。
+        const freshVisible = readLiveVisibleText(state.activeReader);
+        if (freshVisible) state.activeReader.payload.visibleText = freshVisible;
         // 普通设置保存必须保留当前 reader mode；只有 openMode 设置本身变化时才同步切换。
         // 确保 readerSettings 与立绘位置始终来自同一个 mode，避免 spriteLayouts 取错 key。
         const syncModeFromSettings = optionsForRender.syncModeFromSettings === true;
@@ -1660,14 +1664,19 @@ export function createIgsReaderHost(options = {}) {
     }
 
     function hydrateReaderMount(container, snapshot) {
-        clearChildren(container);
-        container.innerHTML = snapshot.html;
+        // 只在首次挂载时重建 DOM；后续渲染复用已有节点，
+        // 避免浏览器对相同 URL 的背景图/立绘重新发起加载请求。
         let overlay = container.querySelector('#igs-overlay');
         if (!overlay) {
-            overlay = buildFallbackReaderOverlay(container.ownerDocument || getRootDocument(options.global));
-            if (overlay) container.appendChild(overlay);
+            clearChildren(container);
+            container.innerHTML = snapshot.html;
+            overlay = container.querySelector('#igs-overlay');
+            if (!overlay) {
+                overlay = buildFallbackReaderOverlay(container.ownerDocument || getRootDocument(options.global));
+                if (overlay) container.appendChild(overlay);
+            }
+            normalizeReaderStableLayers(overlay);
         }
-        normalizeReaderStableLayers(overlay);
         return {
             overlay,
             dialog: overlay ? overlay.querySelector('#igs-dialog') : null,
