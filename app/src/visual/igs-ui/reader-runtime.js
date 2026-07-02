@@ -10,6 +10,9 @@ export function applyReaderModeRuntime(root, snapshot, current, ctx = {}) {
         exitDocumentFullscreen(current.runtime.doc);
     }
     clearReaderModeRuntime(current);
+    // 切换模式时清除上一模式（pc/mobile 的 applyInlineReaderRuntime）写在 root 上的内联样式，
+    // 否则切到 web/fullscreen 后残留的 width/height/transform 等会阻止新模式生效。
+    resetInlineModeStyles(root);
     const win = getOwnerWindow(root);
     const doc = root && root.ownerDocument;
     const runtime = {
@@ -410,4 +413,16 @@ function syncOrientationClass(root, win) {
         root.classList.add('igs-portrait');
         root.classList.remove('igs-landscape');
     }
+}
+
+// 切换模式时清除 applyInlineReaderRuntime 写在 root 上的所有内联样式，
+// 避免残留值阻止 web/fullscreen 模式的 CSS 类规则生效。
+function resetInlineModeStyles(root) {
+    if (!root || !root.style) return;
+    const props = [
+        'top', 'right', 'bottom', 'left', 'width', 'height',
+        'maxWidth', 'maxHeight', 'transform', 'borderRadius',
+        'boxShadow', 'overflow', 'boxSizing', 'zIndex',
+    ];
+    for (const prop of props) root.style[prop] = '';
 }

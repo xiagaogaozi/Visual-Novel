@@ -24,11 +24,19 @@ export function findOptionTable(tables) {
     return null;
 }
 
-// 从一张表里提取选项文本：取首个非 row_id 列的每行内容，去空去重。
-// 若表含「展示文本」列，则只取该列（用于检定建议表这类多列表）。
+function findDiceCommandColumn(columns) {
+    return columns.findIndex((column) => String(column || '').replace(/\s+/g, '') === '骰子命令');
+}
+
+// 从一张表里提取选项：返回 {display, send}[]。
+// 若表含「展示文本」+「骰子命令」两列（检定建议表），display=展示文本，
+// send=展示文本+空格+骰子命令（骰子系统前端凭 DSL 短命令触发数值判定）。
+// 只有「展示文本」时，display===send===展示文本；普通宽表取全部非 row_id 列，
+// display===send===列值，与旧行为完全兼容。
 export function extractOptionTexts(table) {
     if (!table || !Array.isArray(table.columns) || !Array.isArray(table.rows)) return [];
     const displayCol = findDisplayTextColumn(table.columns);
+    const diceCol = findDiceCommandColumn(table.columns);
     let textCols;
     if (displayCol >= 0) {
         textCols = [displayCol];
@@ -43,12 +51,17 @@ export function extractOptionTexts(table) {
     const out = [];
     for (const row of table.rows) {
         for (const textCol of textCols) {
-            const value = String((Array.isArray(row) ? row[textCol] : '') ?? '').trim();
-            if (!value) continue;
-            const key = value.toLowerCase();
+            const display = String((Array.isArray(row) ? row[textCol] : '') ?? '').trim();
+            if (!display) continue;
+            const key = display.toLowerCase();
             if (seen.has(key)) continue;
             seen.add(key);
-            out.push(value);
+            if (displayCol >= 0 && diceCol >= 0) {
+                const dice = String((Array.isArray(row) ? row[diceCol] : '') ?? '').trim();
+                out.push({ display, send: dice ? `${display} ${dice}` : display });
+            } else {
+                out.push({ display, send: display });
+            }
         }
     }
     return out;

@@ -452,14 +452,16 @@ export function createIgsReaderHost(options = {}) {
         container.setAttribute('data-igs-pos', cfg.position);
         container.setAttribute('data-igs-width', cfg.widthFollowsText ? 'text' : 'dialog');
         clearChildren(container);
-        for (const text of items) {
+        for (const item of items) {
+            const display = (item && typeof item === 'object') ? String(item.display || '') : String(item || '');
+            const send = (item && typeof item === 'object') ? String(item.send || item.display || '') : String(item || '');
             const bubble = doc.createElement('button');
             bubble.type = 'button';
             bubble.className = 'igs-option-bubble igs-bubble';
-            bubble.textContent = text;
+            bubble.textContent = display;
             bubble.addEventListener('click', (event) => {
                 if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
-                onOptionBubbleClick(container, text, cfg);
+                onOptionBubbleClick(container, send, cfg);
             });
             container.appendChild(bubble);
         }

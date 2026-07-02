@@ -590,12 +590,14 @@ export function applyReaderSnapshotToDom(root, snapshot, current, ctx = {}) {
         input.placeholder = snapshot.input.placeholder;
         input.value = current.inputValue;
     }
-    if (send) {
+    if (send && !(send.dataset && send.dataset.igsBound)) {
+        if (send.dataset) send.dataset.igsBound = '1';
         send.addEventListener('click', async () => {
             await current.controller.submit(input ? input.value : current.inputValue);
         });
     }
-    if (clickLayer) {
+    if (clickLayer && !(clickLayer.dataset && clickLayer.dataset.igsBound)) {
+        if (clickLayer.dataset) clickLayer.dataset.igsBound = '1';
         clickLayer.addEventListener('click', () => {
             if (current.dragSuppressClick || (current.runtime && current.runtime.dragSuppressClick)) {
                 current.dragSuppressClick = false;
@@ -614,7 +616,8 @@ export function applyReaderSnapshotToDom(root, snapshot, current, ctx = {}) {
             if (typeof ctx.handleBlankClick === 'function' && ctx.handleBlankClick()) return;
         });
     }
-    if (dialog) {
+    if (dialog && !(dialog.dataset && dialog.dataset.igsBound)) {
+        if (dialog.dataset) dialog.dataset.igsBound = '1';
         dialog.addEventListener('click', (event) => {
             if (current.hidden) return;
             if (event.target && event.target.closest && (

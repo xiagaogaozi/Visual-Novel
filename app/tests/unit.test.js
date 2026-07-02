@@ -1749,8 +1749,8 @@ test('gate:choices:option-table finds 同名表 and extracts text column', () =>
     assert.ok(table);
     assert.equal(table.name, '选项表');
     const items = extractOptionTexts(table);
-    // 跳过 row_id 列、去空、去重（两个"报警"只保留一个）
-    assert.deepEqual(items, ['报警', '找工具']);
+    // 跳过 row_id 列、去空、去重（两个"报警"只保留一个）；返回 {display,send} 对象
+    assert.deepEqual(items, [{ display: '报警', send: '报警' }, { display: '找工具', send: '找工具' }]);
 });
 
 test('gate:choices:option-table extracts wide option rows', () => {
@@ -1760,7 +1760,12 @@ test('gate:choices:option-table extracts wide option rows', () => {
         columns: ['row_id', '选项一', '选项二', '选项三', '选项四'],
         rows: [['1', '报警', '找工具', '原地等待', '离开']],
     };
-    assert.deepEqual(extractOptionTexts(table), ['报警', '找工具', '原地等待', '离开']);
+    assert.deepEqual(extractOptionTexts(table), [
+        { display: '报警', send: '报警' },
+        { display: '找工具', send: '找工具' },
+        { display: '原地等待', send: '原地等待' },
+        { display: '离开', send: '离开' },
+    ]);
 });
 
 test('gate:choices:option-table 检定建议表 only extracts 展示文本 column', () => {
@@ -1773,8 +1778,30 @@ test('gate:choices:option-table 检定建议表 only extracts 展示文本 colum
             ['2', '用话术周旋', '对抗', '白墨', '话术'],
         ],
     };
-    // 多业务字段表只取「展示文本」列，不把对抗/角色/属性等列也当选项。
-    assert.deepEqual(extractOptionTexts(table), ['力量对抗试试看', '用话术周旋']);
+    // 多业务字段表只取「展示文本」列，display===send（无骰子命令列）。
+    assert.deepEqual(extractOptionTexts(table), [
+        { display: '力量对抗试试看', send: '力量对抗试试看' },
+        { display: '用话术周旋', send: '用话术周旋' },
+    ]);
+});
+
+test('gate:choices:option-table 检定建议表 appends 骰子命令 to send', () => {
+    const table = {
+        uid: 'sheet_4',
+        name: '检定建议表',
+        columns: ['row_id', '展示文本', '骰子命令'],
+        rows: [
+            ['1', '力量对抗试试看', '对抗 哪吒 力量 vs 白墨 力量'],
+            ['2', '用话术周旋', '检定 白墨 话术 [难度=困难]'],
+            ['3', '静观其变', ''],
+        ],
+    };
+    // 有骰子命令列时 send = 展示文本 + 空格 + 骰子命令；骰子命令为空时 send===display。
+    assert.deepEqual(extractOptionTexts(table), [
+        { display: '力量对抗试试看', send: '力量对抗试试看 对抗 哪吒 力量 vs 白墨 力量' },
+        { display: '用话术周旋', send: '用话术周旋 检定 白墨 话术 [难度=困难]' },
+        { display: '静观其变', send: '静观其变' },
+    ]);
 });
 
 test('gate:choices:option-table accepts 选项/行动选项 aliases', () => {
