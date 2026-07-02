@@ -31,6 +31,7 @@ const THOUGHT_RE_GLOBAL = /\[igs-thought:([^|\]]+)\|[^|\]]+\|([^\]]+)\]/gm;
 // 标签从渲染层 .mes_text 隐藏，所以「数据层有标签、DOM 无标签」是渲染清洗造成的
 // 结构性差异，绝不能当成关键词插件改词而用 DOM 覆盖数据层。
 const IGS_DIRECTIVE_TAG_RE = /\[igs-(?:scene|char|thought):/;
+const IGS_DIRECTIVE_LINE_RE = /^\[igs-(?:scene|char|thought):[^\]]*\]/;
 
 function hasIgsDirectiveTags(text) {
     return IGS_DIRECTIVE_TAG_RE.test(String(text || ''));
@@ -323,17 +324,24 @@ export function buildIgsTextPayload(message, options = {}) {
 
     formattedText = normalizeWhitespace(formattedText);
 
-    // DOM 差异优先：第三方关键词过滤插件（如 Veridis）只改渲染层 .mes_text，
-    // 不一定回写 chat[n].mes。移动端宿主下数据层回写更会滞后，导致读到旧词。
+    // DOM 差异优先：第三方关键词过滤插件（如 Veridis）会改渲染层 .mes_text，
+    // 且在生成结束后写回 chat[n].mes，但回写可能延迟或在历史消息上未触发。
     // 当 DOM 可见文本与数据层纯文本只是局部（词级）不同时，信任 DOM。
-    // 例外：数据层含 [igs-scene/char/thought:] 标签而 DOM 文本不含时，是宿主前端把标签
-    // 从渲染层清洗掉了，不是改词。此时用 DOM 覆盖会丢失全部对白/心理话标签，必须放弃覆盖。
+    // 指令标签单独处理：宿主前端会把 [igs-scene/char/thought:] 从 .mes_text 清洗掉，
+    // 所以"DOM 无标签、数据层有标签"是宿主正常行为，不是插件改词。
+    // 文本覆盖和指令来源解耦：
+    //   - DOM 文本覆盖照常进行（让 Veridis 替换词进阅读器）
+    //   - 场景指令始终从数据层原文提取（DOM 里没有标签，不能从 DOM 重提）
+    // 长度比对用 domCompareBase：domClobbersDirectiveTags 时去掉指令行，
+    // 避免标签内容撑大数据层长度后被 localizedTextDiffers 误判为"不同内容"。
     const domVisibleText = normalizeWhitespace(visibleText);
     const domClobbersDirectiveTags = hasIgsDirectiveTags(raw) && !hasIgsDirectiveTags(domVisibleText);
+    const domCompareBase = domClobbersDirectiveTags
+        ? normalizeWhitespace(buildDomCompareBase(formattedText))
+        : cleanedRaw;
     if (domVisibleText
         && !looksLikeHostUiHtml(domVisibleText)
-        && !domClobbersDirectiveTags
-        && localizedTextDiffers(cleanedRaw, domVisibleText)) {
+        && localizedTextDiffers(domCompareBase, domVisibleText)) {
         // DOM 文本可能仍含 [igs-char/thought:] 原始标签（宿主没清洗）。必须先跑正文格式化，
         // 把标签转成气泡/心理话形态（[名]：… 与 *…*），否则阅读器把整段当旁白、丢失角色名。
         const domFormatted = applyImmersiveGalgameSystemBodyFormat(domVisibleText, virtualRegex);
@@ -341,9 +349,13 @@ export function buildIgsTextPayload(message, options = {}) {
         sourceKind = 'dom-visible-override';
         formatSourceKind = 'dom-visible-override';
         usedDomOverride = true;
-        sceneDirectives = sceneAssetsEnabled
-            ? extractSceneDirectives(domVisibleText).directives
-            : sceneDirectives;
+        // domClobbersDirectiveTags：宿主把指令标签从 DOM 清洗掉了，DOM 里没有标签，
+        // 不能从 DOM 重提指令——保留数据层已提取的 sceneDirectives。
+        if (!domClobbersDirectiveTags) {
+            sceneDirectives = sceneAssetsEnabled
+                ? extractSceneDirectives(domVisibleText).directives
+                : sceneDirectives;
+        }
     }
 
     if (sceneAssetsEnabled && !sceneDirectives.length) {
@@ -613,4 +625,27 @@ function escapeRegExp(value) {
 
 function isPlainObject(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function stripIgsDirectiveLines(text) {
+    return String(text || '').split('\n')
+        .filter(line => !IGS_DIRECTIVE_LINE_RE.test(line.trim()))
+        .join('\n');
+}
+
+// domClobbersDirectiveTags 时的对比基准：从已格式化文本去掉 [igs-scene:] 行，
+// 并把 *心理话* 和 [名字]：对白 还原为纯内容，使其与 DOM（宿主隐藏标签后的纯文本）
+// 结构对齐——只剩词级差异，让 localizedTextDiffers 正确判断 Veridis 是否改过词。
+function buildDomCompareBase(formattedText) {
+    return String(formattedText || '').split('\n')
+        .filter(line => !IGS_DIRECTIVE_LINE_RE.test(line.trim()))
+        .map(line => {
+            const s = line.trim();
+            const thoughtMatch = s.match(/^\*([\s\S]*)\*$/);
+            if (thoughtMatch) return thoughtMatch[1];
+            const dialogueMatch = s.match(/^\[[^\]]+\]\s*[:：]\s*([\s\S]*)$/);
+            if (dialogueMatch) return dialogueMatch[1];
+            return line;
+        })
+        .join('\n');
 }

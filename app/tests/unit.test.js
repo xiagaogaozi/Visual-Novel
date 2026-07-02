@@ -299,6 +299,37 @@ test('gate:scene:igs-message-source:keeps-data-directives-when-dom-strips-igs-ta
     assert.equal(chars.length, 1);
 });
 
+test('gate:scene:igs-message-source:dom-override-applies-veridis-replacements-when-host-strips-igs-tags', () => {
+    // Veridis 真机场景：宿主把 [igs-*:] 从 DOM 清洗掉 + Veridis 替换了正文词。
+    // 修复前：domClobbersDirectiveTags=true 阻断整个 DOM override，阅读器显示原词。
+    // 修复后：文本覆盖照常生效（Veridis 替换词进阅读器），指令从数据层提取（不丢失）。
+    const dataLayer = [
+        '<content>',
+        '[igs-scene:厢房|早晨|晴天]',
+        '他烦躁地拨弄着头发。',
+        '[igs-thought:哪吒|烦躁|什么破头发，剪了算了。]',
+        '[igs-char:白墨|玩味|吒儿姐姐，起了么？]',
+        '</content>',
+    ].join('\n');
+    // 宿主清洗了 [igs-*:] 标签，Veridis 把"头发"替换成了"鬓发"
+    const domVisible = '他烦躁地拨弄着鬓发。\n什么破鬓发，剪了算了。\n吒儿姐姐，起了么？';
+    const sceneAssets = {
+        enabled: true,
+        promptRule: 'r',
+        characters: { 哪吒: { 烦躁: 'u' }, 白墨: { 玩味: 'u' } },
+    };
+    const payload = buildIgsTextPayload({ text: dataLayer, visibleText: domVisible }, { sceneAssets });
+
+    assert.equal(payload.usedDomOverride, true);
+    assert.match(payload.formattedText, /鬓发/);
+    assert.equal(payload.formattedText.includes('头发'), false);
+    // 指令从数据层提取，不丢失
+    const thoughts = payload.sceneDirectives.filter((d) => d.type === 'thought');
+    const chars = payload.sceneDirectives.filter((d) => d.type === 'char');
+    assert.equal(thoughts.length, 1);
+    assert.equal(chars.length, 1);
+});
+
 test('gate:scene:igs-message-source:dom-override-formats-igs-tags-into-bubbles', () => {
     // 真机场景：宿主 DOM .mes_text 仍保留原始 [igs-char/thought:] 标签，且与数据层有词级差异
     // 触发 DOM override。override 必须对 DOM 文本跑正文格式化，把标签转成 [名]：… 与 *…*，
