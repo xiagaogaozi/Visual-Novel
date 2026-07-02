@@ -19,7 +19,8 @@ JS-Slash-Runner（酒馆助手）Immersive Galgame System 项目。
 
 - 阶段：最小闭环已接通
 - 形态：独立 app 工程，已有 Node 原生测试与验收闸门
-- 当前项目版本 `v0.23.23`：再修移动端对话框左下角漏直角。根因是 floating 对话框 `transform:none` 不创建合成层，移动端在 `#igs-bg`（带 filter 的合成层）之上渲染时，对话框圆角缺口处把背后黑渐变渲染成直角硬边（桌面 pc 模式用 `translateX(-50%)` 本就是合成层故正常）。改 floating 对话框 `transform:translateZ(0)` 补合成层；移除上版无效的 `isolation:isolate`。
+- 当前项目版本 `v0.23.24`：修复场景素材模式下 `[igs-scene:]` 标签在阅读器正文中可见、以及背景图从错误页面才开始插入的问题。根因是 `buildReaderSnapshot` 未使用已由 `parseSceneText` 清洁的 `extracted.textSegments`，而是从含标签的 `formattedText` 重新构建分段——标签行成为幽灵分段导致坐标系错位。改为优先使用 `extracted.textSegments`，两个 bug 同时消除。
+- `v0.23.23`：再修移动端对话框左下角漏直角。根因是 floating 对话框 `transform:none` 不创建合成层，移动端在 `#igs-bg`（带 filter 的合成层）之上渲染时，对话框圆角缺口处把背后黑渐变渲染成直角硬边（桌面 pc 模式用 `translateX(-50%)` 本就是合成层故正常）。改 floating 对话框 `transform:translateZ(0)` 补合成层；移除上版无效的 `isolation:isolate`。
 - `v0.23.22`：清理 loader 冗余，改为锁定 tag 的固定版 loader 机制。
 - `v0.23.21`：①对话主题取消预设下拉、恒自定义；②分割线只留渐变线/无；③场景预设框统一样式；④修复对话框左下角漏直角。
 - `v0.23.20`：修复顶部固定工具栏横向滚动用手指滑不动的问题，改为照搬数据库标签栏的 JS 指针拖拽滚动。

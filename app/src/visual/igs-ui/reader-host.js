@@ -906,7 +906,7 @@ export function createIgsReaderHost(options = {}) {
         );
         const segments = Array.isArray(payload.textSegments) && payload.textSegments.length
             ? cloneData(payload.textSegments)
-            : buildTextSegments(text);
+            : buildTextSegments(stripSceneDirectiveLines(text));
         const normalizedIndex = Math.max(0, Math.min(segments.length - 1, Number(index) || 0));
         const imageState = normalizeSnapshotImageState(
             payload.imageState,
@@ -2046,4 +2046,12 @@ function cloneReaderPayload(payload = {}) {
         clone[key] = key === "message" ? (value || null) : cloneData(value);
     }
     return clone;
+}
+
+const SCENE_TAG_LINE_RE = /^\[igs-scene:[^\]]*\]/;
+
+function stripSceneDirectiveLines(rawText) {
+    return String(rawText || '').split('\n')
+        .filter(line => !SCENE_TAG_LINE_RE.test(line.trim()))
+        .join('\n');
 }
